@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>教學圖產生器</title>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+  :root{ --blue:#2b7fff; --ink:#1666d4; }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  body{
+    font-family:"PingFang TC","Heiti TC","Microsoft JhengHei",sans-serif;
+    background:#eef4fc; color:#243b53; line-height:1.5;
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+  header{
+    background:#fff; border-bottom:1px solid #dbe6f5; padding:14px 22px;
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  }
+  header h1{ font-size:18px; color:var(--ink); }
+  header .spacer{ flex:1; }
+  .field{ display:flex; align-items:center; gap:8px; font-size:14px; }
+  .field input, .field select{
+    font:inherit; padding:7px 10px; border:1px solid #cbd8ea; border-radius:9px; background:#fff;
+  }
+  #title-in{ width:340px; max-width:46vw; }
+  button{
+    font:inherit; cursor:pointer; border:none; border-radius:10px;
+    padding:9px 16px; background:var(--blue); color:#fff; font-weight:600;
+  }
+  button.ghost{ background:#eaf1fb; color:var(--ink); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+
+  main{ flex:1; display:flex; gap:18px; padding:18px 22px; align-items:flex-start; }
+  .panel{ background:#fff; border:1px solid #dbe6f5; border-radius:14px; padding:16px; }
+  .side{ width:250px; flex:none; }
+  .side h2{ font-size:14px; color:#5a7599; margin-bottom:10px; }
+  .thumbs{ display:flex; flex-direction:column; gap:10px; }
+  .thumb{
+    display:flex; align-items:center; gap:10px; padding:8px; border:1px solid #e2eaf5;
+    border-radius:10px; background:#f7fafe;
+  }
+  .thumb img{ width:38px; height:82px; object-fit:cover; object-position:top; border-radius:6px; background:#fff; }
+  .thumb .t-info{ flex:1; font-size:12px; color:#5a7599; }
+  .thumb .t-btns{ display:flex; flex-direction:column; gap:4px; }
+  .thumb .t-btns button{ padding:3px 8px; font-size:12px; background:#eaf1fb; color:var(--ink); }
+  .drop{
+    margin-top:12px; border:2px dashed #b9cdea; border-radius:12px; padding:22px 10px;
+    text-align:center; color:#7089a8; font-size:13px; cursor:pointer;
+  }
+  .drop.drag{ background:#eaf1fb; border-color:var(--blue); }
+  .hint{ font-size:12px; color:#8aa0bd; margin-top:10px; }
+
+  .stage-wrap{ flex:1; overflow:auto; }
+  .stage-scale{ transform-origin:top left; }
+  /* ===== 匯出畫布（尺寸由 JS 設定） ===== */
+  #stage{
+    position:relative; overflow:hidden;
+    font-family:"PingFang TC","Heiti TC","Microsoft JhengHei",sans-serif;
+    background:radial-gradient(120% 120% at 50% -10%, #f4f9ff 0%, #e4eeff 55%, #d6e6ff 100%);
+  }
+  /* 柔邊藍球（不用 filter:blur，讓 html2canvas 也能正確輸出） */
+  .blob{ position:absolute; border-radius:50%;
+    background:radial-gradient(closest-side, rgba(150,190,255,.65), rgba(150,190,255,0)); }
+  .b1{ width:22%; aspect-ratio:1; left:-5%; top:9%; }
+  .b2{ width:17%; aspect-ratio:1; left:3%;  top:58%; }
+  .b3{ width:20%; aspect-ratio:1; right:-4%; top:46%; }
+  .b4{ width:15%; aspect-ratio:1; right:8%; top:5%; }
+  .title-wrap{
+    position:absolute; top:4.2%; left:50%; transform:translateX(-50%);
+    background:rgba(255,255,255,.75); border:1px solid rgba(255,255,255,.9);
+    box-shadow:0 18px 50px rgba(90,140,220,.22); border-radius:36px;
+    padding:26px 70px 34px; white-space:nowrap;
+  }
+  .title{ font-weight:900; letter-spacing:2px; color:var(--ink); line-height:1;
+    text-shadow:0 0 1px var(--ink), 0 0 1px var(--ink); }
+  .row{ position:absolute; left:0; right:0; bottom:24px;
+    display:flex; justify-content:center; align-items:flex-end; }
+  .phone{ position:relative; overflow:hidden; border-radius:34px;
+    box-shadow:0 26px 60px rgba(70,110,190,.28); background:#fff; }
+  .phone img{ width:100%; height:100%; object-fit:cover; object-position:top; display:block; }
+  .mark{ position:absolute; border:4px solid var(--blue); border-radius:14px;
+    box-shadow:0 0 0 4px rgba(43,127,255,.15); }
+  /* 編輯時：可刪除的框有個小叉（匯出前會移除） */
+  .mark .del{ position:absolute; top:-14px; right:-14px; width:26px; height:26px;
+    border-radius:50%; background:#ff5a5a; color:#fff; font-size:16px; line-height:26px;
+    text-align:center; cursor:pointer; display:none; }
+  #stage.editing .mark .del{ display:block; }
+  #stage.editing .phone{ cursor:crosshair; }
+  .empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:#8aa0bd; font-size:34px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🖼️ 教學圖產生器</h1>
+  <div class="field"><label>標題</label><input id="title-in" placeholder="輸入主標題…"></div>
+  <div class="field"><label>尺寸</label>
+    <select id="size-in">
+      <option value="2000x1050">橫式 2000×1050</option>
+      <option value="1080x1350">IG 直式 1080×1350</option>
+      <option value="1200x630">分享卡 1200×630</option>
+    </select>
+  </div>
+  <div class="spacer"></div>
+  <button id="dl-btn" disabled>⬇️ 下載 PNG</button>
+</header>
+
+<main>
+  <aside class="side panel">
+    <h2>手機截圖（可拖曳排序點按鈕）</h2>
+    <div class="thumbs" id="thumbs"></div>
+    <div class="drop" id="drop">＋ 點此或拖曳上傳截圖<br>（1～4 張）</div>
+    <p class="hint">✏️ 在中間的截圖上<b>按住拖曳</b>就能畫藍框；框右上角紅點可刪除。</p>
+  </aside>
+
+  <section class="stage-wrap">
+    <div class="stage-scale" id="stage-scale">
+      <div id="stage" class="editing">
+        <div class="blob b1"></div><div class="blob b2"></div>
+        <div class="blob b3"></div><div class="blob b4"></div>
+        <div class="title-wrap"><div class="title" id="title-el"></div></div>
+        <div class="row" id="row"></div>
+        <div class="empty" id="empty">← 先上傳截圖</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const RATIO = 1170/2532;              // iPhone 截圖寬高比
+const GAP = 64;
+let phones = [];                      // { src, marks:[{left,top,width,height}] }
+let canvas = { w:2000, h:1050 };
+
+const $ = s => document.querySelector(s);
+const stage = $('#stage'), row = $('#row'), titleEl = $('#title-el');
+
+/* ---------- 標題 / 尺寸 ---------- */
+$('#title-in').addEventListener('input', e => { titleEl.textContent = e.target.value; fitTitle(); });
+$('#size-in').addEventListener('change', e => {
+  const [w,h] = e.target.value.split('x').map(Number);
+  canvas = { w, h }; render();
+});
+
+/* ---------- 上傳 ---------- */
+const drop = $('#drop');
+drop.addEventListener('click', () => pickFiles());
+['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+drop.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+
+function pickFiles(){
+  const inp = document.createElement('input');
+  inp.type='file'; inp.accept='image/*'; inp.multiple=true;
+  inp.onchange = () => addFiles(inp.files);
+  inp.click();
+}
+function addFiles(fileList){
+  const files = [...fileList].filter(f => f.type.startsWith('image/'));
+  files.forEach(f => {
+    if (phones.length >= 4) return;
+    const rd = new FileReader();
+    rd.onload = () => { phones.push({ src: rd.result, marks: [] }); renderThumbs(); render(); };
+    rd.readAsDataURL(f);
+  });
+}
+
+/* ---------- 縮圖列表 ---------- */
+function renderThumbs(){
+  const box = $('#thumbs'); box.innerHTML='';
+  phones.forEach((p,i) => {
+    const el = document.createElement('div'); el.className='thumb';
+    el.innerHTML = `<img src="${p.src}">
+      <div class="t-info">第 ${i+1} 張<br>${p.marks.length} 個框</div>
+      <div class="t-btns">
+        <button data-a="up" ${i===0?'disabled':''}>↑</button>
+        <button data-a="down" ${i===phones.length-1?'disabled':''}>↓</button>
+        <button data-a="del">✕</button>
+      </div>`;
+    el.querySelectorAll('button').forEach(b => b.onclick = () => {
+      const a=b.dataset.a;
+      if(a==='up'){ [phones[i-1],phones[i]]=[phones[i],phones[i-1]]; }
+      if(a==='down'){ [phones[i+1],phones[i]]=[phones[i],phones[i+1]]; }
+      if(a==='del'){ phones.splice(i,1); }
+      renderThumbs(); render();
+    });
+    box.appendChild(el);
+  });
+}
+
+/* ---------- 主渲染 ---------- */
+function render(){
+  stage.style.width = canvas.w+'px';
+  stage.style.height = canvas.h+'px';
+  $('#empty').style.display = phones.length ? 'none':'flex';
+  $('#dl-btn').disabled = !phones.length;
+
+  // 手機尺寸自適應
+  row.innerHTML='';
+  const n = phones.length; if(!n){ fitTitle(); scaleStage(); return; }
+  const titleWrap = $('.title-wrap');
+  const titleBottom = titleWrap.offsetTop + titleWrap.offsetHeight;
+  const avail = canvas.h - titleBottom - 40 - 24;
+  let ph = Math.min(720, avail);
+  let pw = ph*RATIO;
+  let total = n*pw + (n-1)*GAP;
+  if(total > canvas.w*0.94){ const s=(canvas.w*0.94)/total; ph*=s; pw*=s; }
+
+  phones.forEach((p,idx) => {
+    const phone = document.createElement('div'); phone.className='phone';
+    phone.style.width=pw+'px'; phone.style.height=ph+'px';
+    const img=document.createElement('img'); img.src=p.src; phone.appendChild(img);
+    p.marks.forEach((m,mi)=> phone.appendChild(makeMark(m, idx, mi)));
+    enableDraw(phone, idx);
+    row.appendChild(phone);
+  });
+  fitTitle(); scaleStage();
+}
+function makeMark(m, pIdx, mIdx){
+  const d=document.createElement('div'); d.className='mark';
+  d.style.left=m.left+'%'; d.style.top=m.top+'%'; d.style.width=m.width+'%'; d.style.height=m.height+'%';
+  const del=document.createElement('div'); del.className='del'; del.textContent='×';
+  del.onclick=(e)=>{ e.stopPropagation(); phones[pIdx].marks.splice(mIdx,1); render(); renderThumbs(); };
+  d.appendChild(del);
+  return d;
+}
+
+/* ---------- 拖曳畫框 ---------- */
+function enableDraw(phone, pIdx){
+  phone.addEventListener('mousedown', e => {
+    if(e.target.classList.contains('del')) return;
+    e.preventDefault();
+    const rect = phone.getBoundingClientRect();
+    const x0=e.clientX-rect.left, y0=e.clientY-rect.top;
+    const box=document.createElement('div'); box.className='mark'; phone.appendChild(box);
+    function move(ev){
+      const x=ev.clientX-rect.left, y=ev.clientY-rect.top;
+      const l=Math.min(x0,x), t=Math.min(y0,y), w=Math.abs(x-x0), h=Math.abs(y-y0);
+      box.style.left=l/rect.width*100+'%'; box.style.top=t/rect.height*100+'%';
+      box.style.width=w/rect.width*100+'%'; box.style.height=h/rect.height*100+'%';
+    }
+    function up(ev){
+      document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up);
+      const w=Math.abs((ev.clientX-rect.left)-x0), h=Math.abs((ev.clientY-rect.top)-y0);
+      if(w>10 && h>10){
+        phones[pIdx].marks.push({
+          left:parseFloat(box.style.left), top:parseFloat(box.style.top),
+          width:parseFloat(box.style.width), height:parseFloat(box.style.height)
+        });
+      }
+      render(); renderThumbs();
+    }
+    document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
+  });
+}
+
+/* ---------- 標題自動縮字 ---------- */
+function fitTitle(){
+  let fs = 118; titleEl.style.fontSize=fs+'px';
+  const wrap=$('.title-wrap');
+  while(wrap.offsetWidth > canvas.w*0.92 && fs>36){ fs-=2; titleEl.style.fontSize=fs+'px'; }
+}
+/* ---------- 預覽縮放到容器寬 ---------- */
+function scaleStage(){
+  const wrap=$('.stage-wrap');
+  const s = Math.min(1, (wrap.clientWidth-24)/canvas.w);
+  $('#stage-scale').style.transform=`scale(${s})`;
+  $('#stage-scale').style.height = canvas.h*s+'px';
+}
+window.addEventListener('resize', scaleStage);
+
+/* ---------- 下載 ---------- */
+$('#dl-btn').addEventListener('click', async () => {
+  stage.classList.remove('editing');           // 隱藏紅點刪除鈕
+  const scaleEl=$('#stage-scale'); const prevT=scaleEl.style.transform;
+  scaleEl.style.transform='none';               // 匯出時歸位，才會用原始尺寸
+  const btn=$('#dl-btn'); btn.disabled=true; btn.textContent='輸出中…';
+  try{
+    const cv = await html2canvas(stage, { scale:2, backgroundColor:null, useCORS:true, logging:false, width:canvas.w, height:canvas.h });
+    const a=document.createElement('a');
+    a.download = (titleEl.textContent||'教學圖')+'.png';
+    a.href = cv.toDataURL('image/png'); a.click();
+  }catch(err){ alert('輸出失敗：'+err.message); }
+  scaleEl.style.transform=prevT;                // 還原預覽縮放
+  stage.classList.add('editing'); btn.disabled=false; btn.textContent='⬇️ 下載 PNG';
+});
+
+/* ---------- 載入範例 ---------- */
+$('#demo-btn').addEventListener('click', async () => {
+  const demo = [
+    { img:'assets/s1.png', marks:[{left:5,top:62,width:89,height:8},{left:5,top:78.5,width:89,height:8}] },
+    { img:'assets/s2.png', marks:[{left:6,top:18,width:17,height:6.4}] },
+    { img:'assets/s3.png', marks:[{left:6,top:18,width:26,height:6.4},{left:29,top:52,width:37,height:7}] },
+  ];
+  $('#title-in').value='設定建立文件後內容存取位置'; titleEl.textContent=$('#title-in').value;
+  phones = [];
+  for(const d of demo){
+    const src = await toDataURL(d.img);
+    phones.push({ src, marks:d.marks });
+  }
+  renderThumbs(); render();
+});
+function toDataURL(url){
+  return fetch(url).then(r=>r.blob()).then(b=>new Promise(res=>{
+    const rd=new FileReader(); rd.onload=()=>res(rd.result); rd.readAsDataURL(b);
+  }));
+}
+
+render();
+</script>
+</body>
+</html>

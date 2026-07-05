@@ -1,0 +1,8 @@
+# 個人手機截圖（含個人資訊，切勿推上公開 repo）
+assets/*.png
+assets/*.jpg
+assets/*.jpeg
+
+# 產出與暫存檔
+output.png
+.active.config.js

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { overflow:hidden; }
+  body {
+    position:relative;
+    font-family:"PingFang TC","Heiti TC",sans-serif;
+    background:radial-gradient(120% 120% at 50% -10%, #f4f9ff 0%, #e4eeff 55%, #d6e6ff 100%);
+  }
+  /* 模糊藍球（用 % 定位，換尺寸也不跑掉） */
+  .blob { position:absolute; border-radius:50%; filter:blur(30px); }
+  .b1 { width:17%; aspect-ratio:1; left:-4%;  top:12%; background:radial-gradient(#bcd6ff,#a9caff); opacity:.55; }
+  .b2 { width:13%; aspect-ratio:1; left:4%;   top:60%; background:radial-gradient(#cfe0ff,#a9caff); opacity:.5; }
+  .b3 { width:15%; aspect-ratio:1; right:-3%; top:48%; background:radial-gradient(#bcd6ff,#a9caff); opacity:.55; }
+  .b4 { width:11%; aspect-ratio:1; right:9%;  top:8%;  background:radial-gradient(#d3e4ff,#b6d1ff); opacity:.45; }
+
+  /* 標題膠囊 */
+  .title-wrap {
+    position:absolute; top:4.2%; left:50%; transform:translateX(-50%);
+    background:rgba(255,255,255,.72);
+    border:1px solid rgba(255,255,255,.9);
+    box-shadow:0 18px 50px rgba(90,140,220,.22);
+    border-radius:36px;
+    padding:26px 70px 34px;
+    backdrop-filter:blur(4px);
+    white-space:nowrap;
+  }
+  .title {
+    font-weight:900; letter-spacing:2px; color:#1666d4;
+    -webkit-text-stroke:2.4px #1666d4; line-height:1;
+  }
+
+  /* 手機列 */
+  .row {
+    position:absolute; left:0; right:0;
+    display:flex; justify-content:center; align-items:flex-end;
+  }
+  .phone {
+    position:relative; overflow:hidden; border-radius:34px;
+    box-shadow:0 26px 60px rgba(70,110,190,.28); background:#fff;
+  }
+  .phone img { width:100%; height:100%; object-fit:cover; object-position:top; display:block; }
+
+  /* 藍框標註 */
+  .mark {
+    position:absolute; border:4px solid #2b7fff; border-radius:14px;
+    box-shadow:0 0 0 4px rgba(43,127,255,.15), 0 6px 16px rgba(43,127,255,.25);
+  }
+</style>
+</head>
+<body>
+  <div class="blob b1"></div><div class="blob b2"></div>
+  <div class="blob b3"></div><div class="blob b4"></div>
+  <div class="title-wrap"><div class="title"></div></div>
+  <div class="row"></div>
+
+  <script src=".active.config.js"></script>
+  <script>
+    const C = window.CONFIG;
+    const GAP = 64;                       // 手機間距
+    const RATIO = 1170 / 2532;            // iPhone 截圖寬高比
+
+    // 畫布尺寸
+    document.body.style.width  = C.canvas.w + 'px';
+    document.body.style.height = C.canvas.h + 'px';
+
+    // 標題（字太長自動縮小）
+    const titleEl = document.querySelector('.title');
+    const titleWrap = document.querySelector('.title-wrap');
+    titleEl.textContent = C.title;
+    let fs = C.titleSize || 118;
+    titleEl.style.fontSize = fs + 'px';
+    while (titleWrap.offsetWidth > C.canvas.w * 0.92 && fs > 40) {
+      fs -= 2; titleEl.style.fontSize = fs + 'px';
+    }
+
+    // 手機列：依數量與可用空間自適應
+    const row = document.querySelector('.row');
+    const n = C.phones.length;
+    const titleBottom = titleWrap.offsetTop + titleWrap.offsetHeight;
+    const avail = C.canvas.h - titleBottom - 40 - 24;   // 標題下方到底部
+    let ph = Math.min(C.phoneMax || 720, avail);
+    let pw = ph * RATIO;
+    let totalW = n * pw + (n - 1) * GAP;
+    if (totalW > C.canvas.w * 0.94) {                   // 太寬就整列等比縮小
+      const s = (C.canvas.w * 0.94) / totalW;
+      ph *= s; pw *= s;
+    }
+    row.style.gap = GAP + 'px';
+    row.style.bottom = '24px';
+
+    C.phones.forEach(p => {
+      const phone = document.createElement('div');
+      phone.className = 'phone';
+      phone.style.width = pw + 'px';
+      phone.style.height = ph + 'px';
+      const img = document.createElement('img');
+      img.src = p.img;
+      phone.appendChild(img);
+      (p.marks || []).forEach(m => {
+        const d = document.createElement('div');
+        d.className = 'mark';
+        d.style.left = m.left + '%';
+        d.style.width = m.width + '%';
+        d.style.top = m.top + '%';
+        d.style.height = m.height + '%';
+        phone.appendChild(d);
+      });
+      row.appendChild(phone);
+    });
+  </script>
+</body>
+</html>

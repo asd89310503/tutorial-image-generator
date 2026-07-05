@@ -23,8 +23,7 @@
   .field input, .field select{
     font:inherit; padding:7px 10px; border:1px solid #cbd8ea; border-radius:9px; background:#fff;
   }
-  #title-in{ width:300px; max-width:38vw; }
-  #sub-in{ width:240px; max-width:32vw; }
+  #title-in{ width:300px; max-width:40vw; }
   button{
     font:inherit; cursor:pointer; border:none; border-radius:10px;
     padding:9px 16px; background:var(--blue); color:#fff; font-weight:600;
@@ -60,17 +59,10 @@
     font-family:"PingFang TC","Heiti TC","Microsoft JhengHei",sans-serif;
     background:radial-gradient(120% 120% at 50% -10%, #f4f9ff 0%, #e4eeff 55%, #d6e6ff 100%);
   }
-  /* 毛玻璃圓球：疊層漸層模擬玻璃質感（不用 backdrop-filter，html2canvas 才輸出得了） */
-  .blob{ position:absolute; border-radius:50%;
-    background:
-      radial-gradient(closest-side at 32% 26%, rgba(255,255,255,.7), rgba(255,255,255,0) 62%),
-      radial-gradient(closest-side, rgba(198,220,255,.55), rgba(150,190,255,.30));
-    border:1px solid rgba(255,255,255,.55);
-    box-shadow: inset 0 -12px 32px rgba(120,160,230,.28), 0 12px 34px rgba(140,175,235,.20); }
-  .b1{ width:24%; aspect-ratio:1; left:-6%; top:8%; }
-  .b2{ width:18%; aspect-ratio:1; left:4%;  top:58%; }
-  .b3{ width:21%; aspect-ratio:1; right:-5%; top:44%; }
-  .b4{ width:15%; aspect-ratio:1; right:9%; top:6%; }
+  /* 背景圖：鋪滿整個畫布（object-fit:cover）。上傳一張做好毛玻璃的圖當背景，
+     它是靜態圖片，html2canvas 匯得出來；沒上傳時用上面的漸層當底。 */
+  .bg-img{ position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; object-position:center; display:none; }
   .title-wrap{
     position:absolute; top:4.2%; left:50%; transform:translateX(-50%);
     background:rgba(255,255,255,.75); border:1px solid rgba(255,255,255,.9);
@@ -79,11 +71,16 @@
   }
   .title{ font-weight:900; letter-spacing:2px; color:var(--ink); line-height:1;
     text-shadow:0 0 1px var(--ink), 0 0 1px var(--ink); }
-  /* 說明膠囊（藍字白底圓角，仿參考圖） */
-  .subtitle-wrap{ position:absolute; left:50%; transform:translateX(-50%); display:none;
-    background:#fff; border-radius:24px; padding:12px 32px;
-    box-shadow:0 8px 26px rgba(90,140,220,.20); white-space:nowrap; }
-  .subtitle{ color:var(--blue); font-weight:800; letter-spacing:1px; line-height:1; }
+  /* 說明標籤（藍字白底圓角，仿參考圖）：可自由拖曳、雙擊編輯、擺在任意位置 */
+  .label{ position:absolute; transform:translate(-50%,-50%); cursor:move;
+    color:var(--blue); font-weight:800; white-space:nowrap; line-height:1;
+    background:rgba(255,255,255,.92); border-radius:16px; padding:10px 22px;
+    box-shadow:0 6px 18px rgba(90,140,220,.20); }
+  .label .ltext{ outline:none; }
+  .label .del{ position:absolute; top:-12px; right:-12px; width:24px; height:24px;
+    border-radius:50%; background:#ff5a5a; color:#fff; font-size:15px; line-height:24px;
+    text-align:center; cursor:pointer; display:none; font-weight:700; }
+  #stage.editing .label .del{ display:block; }
   .row{ position:absolute; left:0; right:0; bottom:24px;
     display:flex; justify-content:center; align-items:flex-end; }
   .phone{ position:relative; overflow:hidden; border-radius:34px;
@@ -105,13 +102,16 @@
 <header>
   <h1>🖼️ 教學圖產生器</h1>
   <div class="field"><label>標題</label><input id="title-in" placeholder="輸入主標題…"></div>
-  <div class="field"><label>說明</label><input id="sub-in" placeholder="選填說明文字…"></div>
   <div class="field"><label>尺寸</label>
     <select id="size-in">
       <option value="2000x1050">橫式 2000×1050</option>
       <option value="1080x1350">IG 直式 1080×1350</option>
       <option value="1200x630">分享卡 1200×630</option>
     </select>
+  </div>
+  <div class="field"><label>背景</label>
+    <button class="ghost" id="bg-btn">上傳背景圖</button>
+    <button class="ghost" id="bg-clear" style="display:none">清除</button>
   </div>
   <div class="spacer"></div>
   <button id="dl-btn" disabled>⬇️ 下載 PNG</button>
@@ -123,16 +123,17 @@
     <div class="thumbs" id="thumbs"></div>
     <div class="drop" id="drop">＋ 點此或拖曳上傳截圖<br>（1～5 張）</div>
     <p class="hint">✏️ 在中間的截圖上<b>按住拖曳</b>就能畫藍框；框右上角紅點可刪除。</p>
+    <button class="ghost" id="add-label" style="margin-top:14px;width:100%">＋ 加說明文字</button>
+    <p class="hint">🏷️ 說明文字可<b>拖曳</b>到任意位置、<b>雙擊</b>改字、紅點刪除。</p>
   </aside>
 
   <section class="stage-wrap">
     <div class="stage-scale" id="stage-scale">
       <div id="stage" class="editing">
-        <div class="blob b1"></div><div class="blob b2"></div>
-        <div class="blob b3"></div><div class="blob b4"></div>
+        <img class="bg-img" id="bg-img" alt="">
         <div class="title-wrap"><div class="title" id="title-el"></div></div>
-        <div class="subtitle-wrap" id="sub-wrap"><div class="subtitle" id="sub-el"></div></div>
         <div class="row" id="row"></div>
+        <div id="labels"></div>
         <div class="empty" id="empty">← 先上傳截圖</div>
       </div>
     </div>
@@ -141,21 +142,66 @@
 
 <script>
 const RATIO = 1170/2532;              // iPhone 截圖寬高比
-const GAP = 8;                        // 手機間距（px，成品畫布尺度）
+const GAP = 15;                       // 手機間距（px，成品畫布尺度）
 const MAX_PHONES = 5;
 let phones = [];                      // { src, marks:[{left,top,width,height}] }
 let canvas = { w:2000, h:1050 };
+let bgSrc = null;                     // 背景圖 dataURL（做好毛玻璃的圖）
+let labels = [];                      // 說明標籤 { text, x, y }（x,y 為畫布百分比）
 
 const $ = s => document.querySelector(s);
-const stage = $('#stage'), row = $('#row'), titleEl = $('#title-el'), subEl = $('#sub-el');
+const stage = $('#stage'), row = $('#row'), titleEl = $('#title-el');
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 
-/* ---------- 標題 / 說明 / 尺寸 ---------- */
+/* ---------- 標題 / 尺寸 ---------- */
 $('#title-in').addEventListener('input', e => { titleEl.textContent = e.target.value; render(); });
-$('#sub-in').addEventListener('input', e => { subEl.textContent = e.target.value; render(); });
 $('#size-in').addEventListener('change', e => {
   const [w,h] = e.target.value.split('x').map(Number);
   canvas = { w, h }; render();
 });
+
+/* ---------- 背景圖 ---------- */
+$('#bg-btn').addEventListener('click', () => {
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+  inp.onchange=()=>{ const f=inp.files[0]; if(!f) return;
+    const rd=new FileReader(); rd.onload=()=>{ bgSrc=rd.result; render(); }; rd.readAsDataURL(f); };
+  inp.click();
+});
+$('#bg-clear').addEventListener('click', () => { bgSrc=null; render(); });
+
+/* ---------- 說明標籤 ---------- */
+$('#add-label').addEventListener('click', () => {
+  labels.push({ text:'說明文字', x:50, y:38 });
+  render();
+  const last=$('#labels').lastElementChild;
+  if(last) last.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));  // 直接進編輯
+});
+function makeLabel(lb){
+  const el=document.createElement('div'); el.className='label';
+  el.style.left=lb.x+'%'; el.style.top=lb.y+'%'; el.style.fontSize=(canvas.h*0.036)+'px';
+  const txt=document.createElement('span'); txt.className='ltext'; txt.textContent=lb.text||'說明文字';
+  const del=document.createElement('div'); del.className='del'; del.textContent='×';
+  del.onclick=(e)=>{ e.stopPropagation(); labels.splice(labels.indexOf(lb),1); render(); };
+  el.appendChild(txt); el.appendChild(del);
+  el.addEventListener('dblclick',(e)=>{ e.stopPropagation();
+    txt.contentEditable='true'; txt.focus();
+    const r=document.createRange(); r.selectNodeContents(txt);
+    const s=getSelection(); s.removeAllRanges(); s.addRange(r);
+  });
+  txt.addEventListener('blur',()=>{ txt.contentEditable='false'; lb.text=txt.textContent.trim();
+    if(!lb.text){ labels.splice(labels.indexOf(lb),1); } render(); });
+  el.addEventListener('mousedown',(e)=>{
+    if(txt.isContentEditable || e.target.classList.contains('del')) return;
+    e.preventDefault();
+    const sr=stage.getBoundingClientRect();
+    const mv=ev=>{ lb.x=clamp((ev.clientX-sr.left)/sr.width*100,2,98);
+                   lb.y=clamp((ev.clientY-sr.top)/sr.height*100,2,98);
+                   el.style.left=lb.x+'%'; el.style.top=lb.y+'%'; };
+    const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+  });
+  return el;
+}
 
 /* ---------- 上傳 ---------- */
 const drop = $('#drop');
@@ -217,7 +263,16 @@ function render(){
   $('#empty').style.display = phones.length ? 'none':'flex';
   $('#dl-btn').disabled = !phones.length;
 
-  const topBottom = layoutTop();          // 定位標題+說明，回傳頂部區塊底部 y
+  // 背景圖：有就鋪滿、沒有就用漸層底
+  const bg=$('#bg-img');
+  if(bgSrc){ bg.src=bgSrc; bg.style.display='block'; $('#bg-clear').style.display='inline-block'; }
+  else { bg.removeAttribute('src'); bg.style.display='none'; $('#bg-clear').style.display='none'; }
+
+  // 說明標籤（可在任意位置，phones 有無都渲染）
+  const lc=$('#labels'); lc.innerHTML='';
+  labels.forEach(lb => lc.appendChild(makeLabel(lb)));
+
+  const topBottom = layoutTop();          // 定位標題，回傳頂部區塊底部 y
 
   // 每張圖等高並排，寬度依「各自的長寬比」（正方形／長方形／手機直式可混排）
   row.innerHTML=''; row.style.gap = GAP+'px';
@@ -238,20 +293,11 @@ function render(){
   });
   scaleStage();
 }
-/* 定位標題與說明膠囊，回傳頂部區塊底部 y 座標 */
+/* 定位標題，回傳頂部區塊底部 y 座標 */
 function layoutTop(){
   fitTitle();
-  const tw=$('.title-wrap'); let bottom = tw.offsetTop + tw.offsetHeight;
-  const sw=$('#sub-wrap');
-  if(subEl.textContent.trim()){
-    fitSub();
-    sw.style.display='block';
-    sw.style.top=(bottom + canvas.h*0.02)+'px';
-    bottom = sw.offsetTop + sw.offsetHeight;
-  } else {
-    sw.style.display='none';
-  }
-  return bottom;
+  const tw=$('.title-wrap');
+  return tw.offsetTop + tw.offsetHeight;
 }
 function makeMark(m, pIdx, mIdx){
   const d=document.createElement('div'); d.className='mark';
@@ -291,16 +337,11 @@ function enableDraw(phone, pIdx){
   });
 }
 
-/* ---------- 標題 / 說明 自動縮字 ---------- */
+/* ---------- 標題自動縮字 ---------- */
 function fitTitle(){
   let fs = 118; titleEl.style.fontSize=fs+'px';
   const wrap=$('.title-wrap');
   while(wrap.offsetWidth > canvas.w*0.92 && fs>36){ fs-=2; titleEl.style.fontSize=fs+'px'; }
-}
-function fitSub(){
-  let fs = 46; subEl.style.fontSize=fs+'px';
-  const wrap=$('#sub-wrap');
-  while(wrap.offsetWidth > canvas.w*0.8 && fs>20){ fs-=2; subEl.style.fontSize=fs+'px'; }
 }
 /* ---------- 預覽縮放到容器寬 ---------- */
 function scaleStage(){

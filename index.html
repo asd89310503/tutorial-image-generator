@@ -92,11 +92,16 @@
     text-align:center; box-shadow:0 4px 14px rgba(43,127,255,.45); }
   .mark{ position:absolute; border:4px solid var(--blue); border-radius:14px;
     box-shadow:0 0 0 4px rgba(43,127,255,.15); }
+  #stage.editing .mark{ cursor:move; }
   /* 編輯時：可刪除的框有個小叉（匯出前會移除） */
   .mark .del{ position:absolute; top:-14px; right:-14px; width:26px; height:26px;
     border-radius:50%; background:#ff5a5a; color:#fff; font-size:16px; line-height:26px;
     text-align:center; cursor:pointer; display:none; }
+  /* 右下角縮放把手（匯出前會移除） */
+  .mark .rz{ position:absolute; right:-11px; bottom:-11px; width:22px; height:22px;
+    background:#fff; border:3px solid var(--blue); border-radius:50%; cursor:nwse-resize; display:none; }
   #stage.editing .mark .del{ display:block; }
+  #stage.editing .mark .rz{ display:block; }
   #stage.editing .phone{ cursor:crosshair; }
   .empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     color:#8aa0bd; font-size:34px; }
@@ -205,14 +210,23 @@ function makeLabel(lb){
   el.addEventListener('mousedown',(e)=>{
     if(txt.isContentEditable || e.target.classList.contains('del')) return;
     e.preventDefault();
-    const sr=stage.getBoundingClientRect();
-    const mv=ev=>{ lb.x=clamp((ev.clientX-sr.left)/sr.width*100,2,98);
-                   lb.y=clamp((ev.clientY-sr.top)/sr.height*100,2,98);
-                   el.style.left=lb.x+'%'; el.style.top=lb.y+'%'; };
-    const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
-    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+    if(e.altKey){                                   // Alt 拖曳：原地留一個、拖出一個複製（仿 Figma）
+      const nl={ text:lb.text, x:lb.x, y:lb.y };
+      labels.push(nl); render();
+      startLabelDrag($('#labels').lastElementChild, nl, e);
+    } else {
+      startLabelDrag(el, lb, e);
+    }
   });
   return el;
+}
+function startLabelDrag(el, lb, e){
+  const sr=stage.getBoundingClientRect();
+  const mv=ev=>{ lb.x=clamp((ev.clientX-sr.left)/sr.width*100,2,98);
+                 lb.y=clamp((ev.clientY-sr.top)/sr.height*100,2,98);
+                 el.style.left=lb.x+'%'; el.style.top=lb.y+'%'; };
+  const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
+  document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
 }
 
 /* ---------- 上傳 ---------- */
@@ -317,7 +331,31 @@ function makeMark(m, pIdx, mIdx){
   d.style.left=m.left+'%'; d.style.top=m.top+'%'; d.style.width=m.width+'%'; d.style.height=m.height+'%';
   const del=document.createElement('div'); del.className='del'; del.textContent='×';
   del.onclick=(e)=>{ e.stopPropagation(); phones[pIdx].marks.splice(mIdx,1); render(); renderThumbs(); };
-  d.appendChild(del);
+  const rz=document.createElement('div'); rz.className='rz';
+  d.appendChild(del); d.appendChild(rz);
+  // 拖本體 → 移動
+  d.addEventListener('mousedown',(e)=>{
+    if(e.target===del || e.target===rz) return;
+    e.stopPropagation(); e.preventDefault();
+    const pr=d.parentElement.getBoundingClientRect();
+    const sx=e.clientX, sy=e.clientY, ol=m.left, ot=m.top;
+    const mv=ev=>{ m.left=clamp(ol+(ev.clientX-sx)/pr.width*100, 0, 100-m.width);
+                   m.top =clamp(ot+(ev.clientY-sy)/pr.height*100, 0, 100-m.height);
+                   d.style.left=m.left+'%'; d.style.top=m.top+'%'; };
+    const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+  });
+  // 拖右下角 → 縮放
+  rz.addEventListener('mousedown',(e)=>{
+    e.stopPropagation(); e.preventDefault();
+    const pr=d.parentElement.getBoundingClientRect();
+    const sx=e.clientX, sy=e.clientY, ow=m.width, oh=m.height;
+    const mv=ev=>{ m.width =clamp(ow+(ev.clientX-sx)/pr.width*100, 3, 100-m.left);
+                   m.height=clamp(oh+(ev.clientY-sy)/pr.height*100, 2, 100-m.top);
+                   d.style.width=m.width+'%'; d.style.height=m.height+'%'; };
+    const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+  });
   return d;
 }
 

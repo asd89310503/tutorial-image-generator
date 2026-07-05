@@ -6,3 +6,4 @@ assets/*.jpeg
 # 產出與暫存檔
 output.png
 .active.config.js
+_*

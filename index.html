@@ -23,7 +23,8 @@
   .field input, .field select{
     font:inherit; padding:7px 10px; border:1px solid #cbd8ea; border-radius:9px; background:#fff;
   }
-  #title-in{ width:340px; max-width:46vw; }
+  #title-in{ width:300px; max-width:38vw; }
+  #sub-in{ width:240px; max-width:32vw; }
   button{
     font:inherit; cursor:pointer; border:none; border-radius:10px;
     padding:9px 16px; background:var(--blue); color:#fff; font-weight:600;
@@ -59,13 +60,17 @@
     font-family:"PingFang TC","Heiti TC","Microsoft JhengHei",sans-serif;
     background:radial-gradient(120% 120% at 50% -10%, #f4f9ff 0%, #e4eeff 55%, #d6e6ff 100%);
   }
-  /* 柔邊藍球（不用 filter:blur，讓 html2canvas 也能正確輸出） */
+  /* 毛玻璃圓球：疊層漸層模擬玻璃質感（不用 backdrop-filter，html2canvas 才輸出得了） */
   .blob{ position:absolute; border-radius:50%;
-    background:radial-gradient(closest-side, rgba(150,190,255,.65), rgba(150,190,255,0)); }
-  .b1{ width:22%; aspect-ratio:1; left:-5%; top:9%; }
-  .b2{ width:17%; aspect-ratio:1; left:3%;  top:58%; }
-  .b3{ width:20%; aspect-ratio:1; right:-4%; top:46%; }
-  .b4{ width:15%; aspect-ratio:1; right:8%; top:5%; }
+    background:
+      radial-gradient(closest-side at 32% 26%, rgba(255,255,255,.7), rgba(255,255,255,0) 62%),
+      radial-gradient(closest-side, rgba(198,220,255,.55), rgba(150,190,255,.30));
+    border:1px solid rgba(255,255,255,.55);
+    box-shadow: inset 0 -12px 32px rgba(120,160,230,.28), 0 12px 34px rgba(140,175,235,.20); }
+  .b1{ width:24%; aspect-ratio:1; left:-6%; top:8%; }
+  .b2{ width:18%; aspect-ratio:1; left:4%;  top:58%; }
+  .b3{ width:21%; aspect-ratio:1; right:-5%; top:44%; }
+  .b4{ width:15%; aspect-ratio:1; right:9%; top:6%; }
   .title-wrap{
     position:absolute; top:4.2%; left:50%; transform:translateX(-50%);
     background:rgba(255,255,255,.75); border:1px solid rgba(255,255,255,.9);
@@ -74,6 +79,11 @@
   }
   .title{ font-weight:900; letter-spacing:2px; color:var(--ink); line-height:1;
     text-shadow:0 0 1px var(--ink), 0 0 1px var(--ink); }
+  /* 說明膠囊（藍字白底圓角，仿參考圖） */
+  .subtitle-wrap{ position:absolute; left:50%; transform:translateX(-50%); display:none;
+    background:#fff; border-radius:24px; padding:12px 32px;
+    box-shadow:0 8px 26px rgba(90,140,220,.20); white-space:nowrap; }
+  .subtitle{ color:var(--blue); font-weight:800; letter-spacing:1px; line-height:1; }
   .row{ position:absolute; left:0; right:0; bottom:24px;
     display:flex; justify-content:center; align-items:flex-end; }
   .phone{ position:relative; overflow:hidden; border-radius:34px;
@@ -95,6 +105,7 @@
 <header>
   <h1>🖼️ 教學圖產生器</h1>
   <div class="field"><label>標題</label><input id="title-in" placeholder="輸入主標題…"></div>
+  <div class="field"><label>說明</label><input id="sub-in" placeholder="選填說明文字…"></div>
   <div class="field"><label>尺寸</label>
     <select id="size-in">
       <option value="2000x1050">橫式 2000×1050</option>
@@ -110,7 +121,7 @@
   <aside class="side panel">
     <h2>手機截圖（可拖曳排序點按鈕）</h2>
     <div class="thumbs" id="thumbs"></div>
-    <div class="drop" id="drop">＋ 點此或拖曳上傳截圖<br>（1～4 張）</div>
+    <div class="drop" id="drop">＋ 點此或拖曳上傳截圖<br>（1～5 張）</div>
     <p class="hint">✏️ 在中間的截圖上<b>按住拖曳</b>就能畫藍框；框右上角紅點可刪除。</p>
   </aside>
 
@@ -120,6 +131,7 @@
         <div class="blob b1"></div><div class="blob b2"></div>
         <div class="blob b3"></div><div class="blob b4"></div>
         <div class="title-wrap"><div class="title" id="title-el"></div></div>
+        <div class="subtitle-wrap" id="sub-wrap"><div class="subtitle" id="sub-el"></div></div>
         <div class="row" id="row"></div>
         <div class="empty" id="empty">← 先上傳截圖</div>
       </div>
@@ -129,15 +141,17 @@
 
 <script>
 const RATIO = 1170/2532;              // iPhone 截圖寬高比
-const GAP = 64;
+const GAP = 8;                        // 手機間距（px，成品畫布尺度）
+const MAX_PHONES = 5;
 let phones = [];                      // { src, marks:[{left,top,width,height}] }
 let canvas = { w:2000, h:1050 };
 
 const $ = s => document.querySelector(s);
-const stage = $('#stage'), row = $('#row'), titleEl = $('#title-el');
+const stage = $('#stage'), row = $('#row'), titleEl = $('#title-el'), subEl = $('#sub-el');
 
-/* ---------- 標題 / 尺寸 ---------- */
-$('#title-in').addEventListener('input', e => { titleEl.textContent = e.target.value; fitTitle(); });
+/* ---------- 標題 / 說明 / 尺寸 ---------- */
+$('#title-in').addEventListener('input', e => { titleEl.textContent = e.target.value; render(); });
+$('#sub-in').addEventListener('input', e => { subEl.textContent = e.target.value; render(); });
 $('#size-in').addEventListener('change', e => {
   const [w,h] = e.target.value.split('x').map(Number);
   canvas = { w, h }; render();
@@ -159,9 +173,16 @@ function pickFiles(){
 function addFiles(fileList){
   const files = [...fileList].filter(f => f.type.startsWith('image/'));
   files.forEach(f => {
-    if (phones.length >= 4) return;
+    if (phones.length >= MAX_PHONES) return;
     const rd = new FileReader();
-    rd.onload = () => { phones.push({ src: rd.result, marks: [] }); renderThumbs(); render(); };
+    rd.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        phones.push({ src: rd.result, ar: im.naturalWidth/im.naturalHeight, marks: [] });
+        renderThumbs(); render();
+      };
+      im.src = rd.result;
+    };
     rd.readAsDataURL(f);
   });
 }
@@ -196,26 +217,41 @@ function render(){
   $('#empty').style.display = phones.length ? 'none':'flex';
   $('#dl-btn').disabled = !phones.length;
 
-  // 手機尺寸自適應
-  row.innerHTML='';
-  const n = phones.length; if(!n){ fitTitle(); scaleStage(); return; }
-  const titleWrap = $('.title-wrap');
-  const titleBottom = titleWrap.offsetTop + titleWrap.offsetHeight;
-  const avail = canvas.h - titleBottom - 40 - 24;
-  let ph = Math.min(720, avail);
-  let pw = ph*RATIO;
-  let total = n*pw + (n-1)*GAP;
-  if(total > canvas.w*0.94){ const s=(canvas.w*0.94)/total; ph*=s; pw*=s; }
+  const topBottom = layoutTop();          // 定位標題+說明，回傳頂部區塊底部 y
+
+  // 每張圖等高並排，寬度依「各自的長寬比」（正方形／長方形／手機直式可混排）
+  row.innerHTML=''; row.style.gap = GAP+'px';
+  const n = phones.length; if(!n){ scaleStage(); return; }
+  const avail = canvas.h - topBottom - 40 - 24;
+  const arOf = p => p.ar || RATIO;                       // 沒讀到比例就當手機直式
+  let H = Math.min(canvas.h*0.82, avail);
+  let total = phones.reduce((s,p)=> s + H*arOf(p), 0) + (n-1)*GAP;
+  if(total > canvas.w*0.94){ H *= (canvas.w*0.94)/total; }
 
   phones.forEach((p,idx) => {
     const phone = document.createElement('div'); phone.className='phone';
-    phone.style.width=pw+'px'; phone.style.height=ph+'px';
+    phone.style.height=H+'px'; phone.style.width=(H*arOf(p))+'px';
     const img=document.createElement('img'); img.src=p.src; phone.appendChild(img);
     p.marks.forEach((m,mi)=> phone.appendChild(makeMark(m, idx, mi)));
     enableDraw(phone, idx);
     row.appendChild(phone);
   });
-  fitTitle(); scaleStage();
+  scaleStage();
+}
+/* 定位標題與說明膠囊，回傳頂部區塊底部 y 座標 */
+function layoutTop(){
+  fitTitle();
+  const tw=$('.title-wrap'); let bottom = tw.offsetTop + tw.offsetHeight;
+  const sw=$('#sub-wrap');
+  if(subEl.textContent.trim()){
+    fitSub();
+    sw.style.display='block';
+    sw.style.top=(bottom + canvas.h*0.02)+'px';
+    bottom = sw.offsetTop + sw.offsetHeight;
+  } else {
+    sw.style.display='none';
+  }
+  return bottom;
 }
 function makeMark(m, pIdx, mIdx){
   const d=document.createElement('div'); d.className='mark';
@@ -255,11 +291,16 @@ function enableDraw(phone, pIdx){
   });
 }
 
-/* ---------- 標題自動縮字 ---------- */
+/* ---------- 標題 / 說明 自動縮字 ---------- */
 function fitTitle(){
   let fs = 118; titleEl.style.fontSize=fs+'px';
   const wrap=$('.title-wrap');
   while(wrap.offsetWidth > canvas.w*0.92 && fs>36){ fs-=2; titleEl.style.fontSize=fs+'px'; }
+}
+function fitSub(){
+  let fs = 46; subEl.style.fontSize=fs+'px';
+  const wrap=$('#sub-wrap');
+  while(wrap.offsetWidth > canvas.w*0.8 && fs>20){ fs-=2; subEl.style.fontSize=fs+'px'; }
 }
 /* ---------- 預覽縮放到容器寬 ---------- */
 function scaleStage(){
@@ -285,27 +326,6 @@ $('#dl-btn').addEventListener('click', async () => {
   scaleEl.style.transform=prevT;                // 還原預覽縮放
   stage.classList.add('editing'); btn.disabled=false; btn.textContent='⬇️ 下載 PNG';
 });
-
-/* ---------- 載入範例 ---------- */
-$('#demo-btn').addEventListener('click', async () => {
-  const demo = [
-    { img:'assets/s1.png', marks:[{left:5,top:62,width:89,height:8},{left:5,top:78.5,width:89,height:8}] },
-    { img:'assets/s2.png', marks:[{left:6,top:18,width:17,height:6.4}] },
-    { img:'assets/s3.png', marks:[{left:6,top:18,width:26,height:6.4},{left:29,top:52,width:37,height:7}] },
-  ];
-  $('#title-in').value='設定建立文件後內容存取位置'; titleEl.textContent=$('#title-in').value;
-  phones = [];
-  for(const d of demo){
-    const src = await toDataURL(d.img);
-    phones.push({ src, marks:d.marks });
-  }
-  renderThumbs(); render();
-});
-function toDataURL(url){
-  return fetch(url).then(r=>r.blob()).then(b=>new Promise(res=>{
-    const rd=new FileReader(); rd.onload=()=>res(rd.result); rd.readAsDataURL(b);
-  }));
-}
 
 render();
 </script>
